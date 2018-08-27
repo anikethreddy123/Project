@@ -1,0 +1,241 @@
+---
+title: 'TalkingData AdTracking Fraud Detection Challenge'
+subtitle: 'MATH 2319 Machine Learning Applied Project Phase II'
+author: "ANIKETH REDDY NIMMA & VIKRANT YADAV"
+date: 11 JUNE 2018
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 3
+linkcolor: blue
+documentclass: article
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+\newpage
+
+\tableofcontents
+
+\newpage
+
+# Introduction \label{sec1}
+
+The above dataset and the problem have been picked from Kaggle [competition](https://www.kaggle.com/c/talkingdata-adtracking-fraud-detection). The dataset has been provided by TalkingData which is an independent big data service platform, covering over 70% of active mobile users in China. TalkingData is responsible for handling around 3 billion clicks per day, of which 90% are potentially fraudulent. The current approach is used by developers is to flag IP addresses which produces a lot of clicks, but never install apps. The scope of this report is to perform exploratory analysis on data in an effort to understand the datasets and identify any trends which can help in feature selection. The model itself will be presented in phase II.
+
+# Data \label{sec2}
+
+The dataset covers approximately 200 million clicks over 4 days of their mobile users. There are 5 datasets provided, *train.csv* and *train_sample.csv* are the training datasets to be used for training the model. Other files namely, *test.csv*, *test_supplement.csv* and *sample_submission.csv* are for testing the model and detailing the format in which to submit for the competition. The scope of this report is to perform exploratory analysis on *train_sample.csv* in an effort to understand the datasets and identify any trends which can help in feature selection. We read the data presented in CSV format and correct the format for each feature. The dataset has 100000 observations with 8 features.
+
+##  Target Feature
+
+The target feature `is_attributed` is a boolean value represeting if the user identified by `ip` installs the app or not. `0` represents that the app was not installed and `1` represents that the app was installed. `attributed_time` is the timestamp of the app download if the user has downloaded the app. It is to be noted that `attributed_time` has a high correlation to the feature and in the real world senario it wouldn't be available. `is_attributed` and may not be much useful in modelling.
+
+## Descriptive Features
+
+The following is the variable description provided at [Kaggle](https://www.kaggle.com/c/talkingdata-adtracking-fraud-detection).
+
+* `ip`: ip address of click
+* `app`: app id for marketing
+* `device`: device type id of user mobile phone
+* `os`: os version id of mobile phone user
+* `channel`: channel id of mobile and publisher
+* `click_time`: timestamp of click
+* `attributed_time`: if user download the app for after clicking an ad, this is the time of the app download
+
+The features `ip`, `app`, `device`, `os`, `chanel` are categorical data. `click_time` and `attributed_time` are timestamps.
+
+# Required packages
+
+The following packages are used in the project.
+
+```{r, include=FALSE}
+library(dplyr)
+library(rpart)
+library(tidyverse)
+library(GGally)
+library(corrplot)
+library(mlr)
+library(ggplot2)
+```
+Here "dplyr"" package is used to transform and summarize on the tabular data.
+"rpart"" is a package used for recursive partitioning for  classification,regression and survival of trees.
+"tidyverse" package is used for data manipulation exploration and visualization that share a common design philosophy.
+GGally is a package that is used for plotting it extends ggplot2 .
+"corrplot" is a package used for the graphical display of the correlation.
+"mlr" is a package for large number of classification and regression techniques.
+
+The data is read from *train_sample.csv* with `is_attributed` as numeric and timestamps as character. The rest of the features are read as factor. The dataset has 100000 and 8 features.From this attributed_time is removed because it has high correlation.
+#READING DATA
+
+
+```{r}
+data <- read_csv("C:/Users/ANIKETH/Downloads/train_sample.csv/mnt/ssd/kaggle-talkingdata2/competition_files/train_sample.csv")
+data$attributed_time <- NULL
+```
+
+## click_time
+
+`click_time` is the timestamp of each ad click recorded. The DateTime variable has been converted into POSIXct object for easier analysis. It also has been divided into date ,hours,minutes,seconds for more better undersanding and analysis of the data
+
+```{r}
+data$click_time <- as.POSIXct(strptime(data$click_time, format="%Y-%m-%d %H:%M:%S"))
+data = data %>% mutate(
+  ip = as.factor(ip),
+  app = as.factor(app),
+  device = as.factor(device),
+  os = as.factor(os),
+  channel = as.factor(channel),
+  day = as.integer(strftime(click_time, format="%d")),
+  hour = as.integer(strftime(click_time, format="%H")),
+  minute = as.integer(strftime(click_time, format="%M")),
+  second = as.integer(strftime(click_time, format="%S")))
+data$click_time <- NULL
+```
+
+#METHODOLOGY \label{sec1}
+Here the data set has been partioned into 80 percent of the training data and 20 percent of the test data.The methods we used are KNN,Naive Bayes and desision tree while Naive Bayes is the primary method we use and. KNN is used to compare the performances
+```{r}
+train_index = sample(1:nrow(data), as.integer(0.8*nrow(data)), replace=FALSE)
+
+train.data <- data[train_index,]
+test.data <- data[-train_index,]
+```
+#Hyperparameter tune fining
+##Naive Bayes
+```{r}
+evaluatePerformance <- function(model, thres=TRUE) {
+  pred <- predict(model, newdata=test.data)
+  print("Mean misclassification error & Accuracy")
+  print(performance(pred, measures=list(mmce, acc)))
+  print("Confusion matrix")
+  print(calculateConfusionMatrix(pred))
+  print("ROC")
+  print(calculateROCMeasures(pred))
+  if(thres==TRUE){
+    d <- generateThreshVsPerfData(pred, measures=mmce)
+    plotThreshVsPerf(d)
+  }
+}
+```
+
+##Naive Bayes
+```{r}
+classif.task <- makeClassifTask(id="is_attributed",data = train.data,target = "is_attributed",positive ='1')
+nb.lnr <- makeLearner("classif.naiveBayes", predict.type = 'prob', fix.factors.prediction = TRUE)
+
+nb.lnr
+
+nb.mod <- train(nb.lnr, task=classif.task)
+evaluatePerformance(nb.mod)
+```
+
+
+From the above analysis for the  50% threshold probability of the data we Have 
+found that only 0.014 mmce value. with an accuracy of 98.58% which is a purely high.
+##Laplace tuning
+```{r}
+getParamSet("classif.naiveBayes")
+```
+Let's configure the discrete tune parameter setting wherek= 0,0.1,2,3,5,10,20in the chunk below. Analternative would bemakeNumericParam.
+```{r}
+ps <- makeParamSet(makeDiscreteParam('laplace', values = c(0, 0.1, 0.5, 2, 3, 5, 10, 20)))
+print(ps)
+```
+```{r}
+ctrl  <- makeTuneControlGrid()
+rdesc <- makeResampleDesc("CV", iters = 2L, stratify = TRUE)
+set.seed(123)
+```
+
+```{r}
+res <- tuneParams("classif.naiveBayes",task = classif.task,resampling = rdesc,par.set = ps,control = ctrl,show.info = FALSE)
+```
+
+```{r}
+res
+```
+From this we can tell that the mmce value is 0.004 less than the one without smoothing.This is less for laplace value 20
+```{r}
+evaluatePerformance(res)
+mmce$minimiz
+res$x
+```
+```{r}
+learner2 <- makeLearner('classif.randomForest', predict.type = 'prob')
+```
+
+##knn without hyper tuning
+```{r}
+knn.lnr <- makeLearner("classif.kknn", predict.type = 'response', fix.factors.prediction = TRUE)
+knn.lnr
+
+knn.mod <- train(knn.lnr, classif.task)
+evaluatePerformance(knn.mod, thres=FALSE)
+```
+
+
+##knn with hyper tuning
+```{r}
+knn.hp <- makeParamSet(
+  makeIntegerParam("k", lower=2, upper=11),
+  makeDiscreteParam("kernel", values=c("rectangular", "optimal"))
+)
+
+knn.lnr <- makeTuneWrapper(knn.lnr, rdesc, mmce, knn.hp, ctrl)
+knn.mod <- train(knn.lnr, classif.task)
+
+evaluatePerformance(knn.mod, thres=FALSE)
+rm(knn.lnr, knn.hp, knn.mod)
+```
+
+From the out put drawn we can say that for the rectangular kernal the outcome on k=9 has an accuracy of 99.7 for mmce value 0.003
+#Desicion tree
+```{r}
+rp.lnr <- makeLearner("classif.rpart", predict.type = 'prob', fix.factors.prediction = TRUE)
+
+rp.mod <- train(rp.lnr, classif.task)
+tree <- getLearnerModel(rp.mod)
+rpart.plot(tree)
+evaluatePerformance(rp.mod)
+rm(tree)
+```
+##Decision tree after tuning
+```{r}
+rp.hp <- makeParamSet(
+  makeDiscreteParam("cp", values=seq(0,0.002, 0.0005)),
+  makeIntegerParam("minsplit", lower = 2, upper = 10),
+  makeDiscreteParam("maxdepth", values = c(20, 30, 40, 50))
+)
+
+rp.lnr <- makeTuneWrapper(rp.lnr, rdesc, mmce, rp.hp, ctrl)
+rp.mod <- train(rp.lnr, classif.task)
+evaluatePerformance(rp.mod)
+```
+
+#Thresholds after tuning
+##Naive Bayes
+```{r}
+psdata <- generateHyperParsEffectData(res)
+plotHyperParsEffect(psdata, x = "laplace",y = "mmce.test.mean",plot.type = "line")
+```
+The plot shows the mmce value means.Which is decreasing for the parameters.
+#evaluate confusion matrix
+```{r}
+calculateConfusionMatrix()
+```
+
+#Discussion
+From the above classification it can be said that the mmce values are very less for knn where as Naive Bayes have a bit more value compartively.While the accuracy value for the is more for knn and a bit less for Naive Bayes .There is no 100% accuracy for either of them.
+#Conclusion
+Among two classifiers performed knn performed well with an accuracy of 99% accuracy where from the data where there are 30 frauds detected out of 227 true values.
+#References
+mlr package 
+kaggle
+
+
+
+
+
