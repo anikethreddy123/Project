@@ -1,7 +1,7 @@
 ---
 title: 'TalkingData AdTracking Fraud Detection Challenge'
 subtitle: 'MATH 2319 Machine Learning Applied Project Phase II'
-author: "ANIKETH REDDY NIMMA & VIKRANT YADAV"
+author: "xxxx"
 date: 11 JUNE 2018
 output:
   pdf_document:
